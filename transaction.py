@@ -1,71 +1,92 @@
+from typing import List, Tuple
 import sqlite3
 
 class Transaction:
-    def __init__(self, db_file):
+    '''This class will be used to create a database and add transactions to the database'''
+    def __init__(self, db_file: str) -> None:
+
         self.conn = sqlite3.connect(db_file)
-        self.cur = self.conn.cursor()
-        self.cur.execute("CREATE TABLE IF NOT EXISTS transactions (item_no INTEGER PRIMARY KEY, amount REAL, category TEXT, date TEXT, description TEXT)")
-        self.conn.commit()
-    
-    def get_transactions(self):
-        self.cursor.execute("SELECT * FROM transactions")
-        rows = self.cursor.fetchall()
-        return rows
-    
-    def get_categories(self):
-        self.cur.execute('SELECT DISTINCT category FROM transactions ORDER BY category')
-        rows = self.cur.fetchall()
-        return [row[0] for row in rows]
-    
-    def add_category(self, category_name):
-        sql = "INSERT INTO categories (category_name) VALUES (?)"
-        self.cur.execute(sql, (category_name,))
-        self.conn.commit()
+        self.create_table()
 
-    def add_transaction(self, amount, category, date, description):
-        self.cur.execute("INSERT INTO transactions VALUES (NULL, ?, ?, ?, ?)", (amount, category, date, description))
+    def create_table(self) -> None:
+        self.conn.execute('''CREATE TABLE IF NOT EXISTS transactions
+                            (id INTEGER PRIMARY KEY,
+                             item_number TEXT,
+                             amount REAL,
+                             category TEXT,
+                             date TEXT,
+                             description TEXT)''')
+
+    def add_transaction(self, item_number: str, amount: float, category: str, date: str, description: str) -> None:
+
+        self.conn.execute(
+            "INSERT INTO transactions (item_number, amount, category, date, description) VALUES (?, ?, ?, ?, ?)",
+            (item_number, amount, category, date, description)
+        )
         self.conn.commit()
 
-    def delete_transaction(self, item_no):
-        self.cur.execute("DELETE FROM transactions WHERE item_no=?", (item_no,))
+    def delete_transaction(self, id: int) -> None:
+        # check if item number exists in the table
+        cursor = self.conn.execute(f"SELECT item_number FROM transactions WHERE id = '{id}'")
+        result = cursor.fetchone()
+        # delete the transaction if it exists
+        self.conn.execute(
+            f"DELETE FROM transactions WHERE id = '{id}'")
         self.conn.commit()
 
-    def modify_category(self, item_no, category):
-        self.cur.execute("UPDATE transactions SET category=? WHERE item_no=?", (category, item_no))
+    def add_category(self, category: str) -> bool:
+        if self.get_category_id(category):
+            return False
+        self.conn.execute(
+            f"INSERT INTO categories (category) VALUES ('{category}')")
         self.conn.commit()
+        return True
 
-    def show_categories(self):
-        self.cur.execute("SELECT DISTINCT category FROM transactions")
-        rows = self.cur.fetchall()
-        for row in rows:
-            print(row[0])
+    def modify_category(self, category: str, new_category: str) -> bool:
+        if self.get_category_id(new_category):
+            return False
+        self.conn.execute(
+            f"UPDATE categories SET category = '{new_category}' WHERE category = '{category}'")
+        self.conn.commit()
+        return True
 
-    def show_transactions(self):
-        self.cur.execute("SELECT * FROM transactions")
-        rows = self.cur.fetchall()
-        for row in rows:
-            print(row)
+    def get_category_id(self, category: str) -> int:
+        cursor = self.conn.execute('''CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY, category TEXT)''')
+        #ALTER TABLE categories ADD COLUMN name TEXT
+        result = cursor.fetchone()
+        if not result:
+            return None
+        return result[0]
 
-    def summarize_by_date(self):
-        self.cur.execute("SELECT date, SUM(amount) FROM transactions GROUP BY date")
-        rows = self.cur.fetchall()
-        for row in rows:
-            print(row)
+    def get_transactions(self) -> List[Tuple]:
+        cursor = self.conn.execute("SELECT * FROM transactions")
+        return cursor.fetchall()
 
-    def summarize_by_month(self):
-        self.cur.execute("SELECT strftime('%Y-%m', date) AS month, SUM(amount) FROM transactions GROUP BY month")
-        rows = self.cur.fetchall()
-        for row in rows:
-            print(row)
+    def get_categories(self) -> List[str]:
+        cursor = self.conn.execute(
+            "SELECT DISTINCT category FROM transactions UNION SELECT category FROM categories")
+        categories = cursor.fetchall()
+        return [category[0] for category in categories]
 
-    def summarize_by_year(self):
-        self.cur.execute("SELECT strftime('%Y', date) AS year, SUM(amount) FROM transactions GROUP BY year")
-        rows = self.cur.fetchall()
-        for row in rows:
-            print(row)
+    def summarize_by_date(self) -> List[Tuple]:
+        cursor = self.conn.execute(
+            "SELECT date, SUM(amount) FROM transactions GROUP BY date")
+        return cursor.fetchall()
 
-    def summarize_by_category(self):
-        self.cur.execute("SELECT category, SUM(amount) FROM transactions GROUP BY category")
-        rows = self.cur.fetchall()
-        for row in rows:
-            print(row)
+    def summarize_by_month(self) -> List[Tuple]:
+        cursor = self.conn.execute(
+            "SELECT strftime('%Y-%m', date) as month, SUM(amount) FROM transactions GROUP BY month")
+        return cursor.fetchall()
+
+    def summarize_by_year(self) -> List[Tuple]:
+        cursor = self.conn.execute(
+            "SELECT strftime('%Y', date) as year, SUM(amount) FROM transactions GROUP BY year")
+        return cursor.fetchall()
+
+    def summarize_by_category(self) -> List[Tuple]:
+        cursor = self.conn.execute(
+            "SELECT category, SUM(amount) FROM transactions GROUP BY category")
+        return cursor.fetchall()
+
+    def __del__(self) -> None:
+        self.conn.close()
